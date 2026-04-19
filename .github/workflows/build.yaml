@@ -38,9 +38,9 @@ jobs:
       - name: Read add-on version
         id: meta
         run: |
-          VERSION="$(grep '^version:' ${ADDON_DIR}/config.yaml | awk '{print $2}' | tr -d '\"' | tr -d \"'\")"
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "Add-on version: ${VERSION}"
+          VERSION=$(sed -n 's/^version:[[:space:]]*//p' "$ADDON_DIR/config.yaml" | head -1)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Add-on version: $VERSION"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
