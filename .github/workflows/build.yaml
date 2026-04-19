@@ -11,6 +11,11 @@ on:
       - 'esphome-enhanced-dashboard/**'
   workflow_dispatch:
 
+env:
+  ADDON_DIR: esphome-enhanced-dashboard
+  REGISTRY: ghcr.io
+  OWNER: heffneil
+
 jobs:
   build:
     name: Build ${{ matrix.arch }}
@@ -21,19 +26,29 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch:
-          - amd64
-          - aarch64
+        include:
+          - arch: amd64
+            platform: linux/amd64
+          - arch: aarch64
+            platform: linux/arm64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Get add-on metadata
+      - name: Read add-on version
         id: meta
         run: |
-          echo "version=$(yq .version esphome-enhanced-dashboard/config.yaml)" >> $GITHUB_OUTPUT
+          VERSION="$(grep '^version:' ${ADDON_DIR}/config.yaml | awk '{print $2}' | tr -d '\"' | tr -d \"'\")"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Add-on version: ${VERSION}"
 
-      - name: Login to GHCR
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
         if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
@@ -41,12 +56,21 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build add-on
-        uses: home-assistant/builder@2025.03.0
+      - name: Build and push
+        uses: docker/build-push-action@v6
         with:
-          args: |
-            --${{ matrix.arch }}
-            --target esphome-enhanced-dashboard
-            --image ghcr.io/heffneil/{arch}-esphome-enhanced-dashboard
-            --docker-hub ghcr.io
-            ${{ github.event_name != 'pull_request' && '--no-latest --push' || '--test' }}
+          context: ${{ env.ADDON_DIR }}
+          file: ${{ env.ADDON_DIR }}/Dockerfile
+          platforms: ${{ matrix.platform }}
+          push: ${{ github.event_name != 'pull_request' }}
+          build-args: |
+            BUILD_FROM=ghcr.io/esphome/esphome-hassio:2026.4.0
+            BUILD_ARCH=${{ matrix.arch }}
+            BUILD_VERSION=${{ steps.meta.outputs.version }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ matrix.arch }}-esphome-enhanced-dashboard:${{ steps.meta.outputs.version }}
+            ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ matrix.arch }}-esphome-enhanced-dashboard:latest
+          labels: |
+            org.opencontainers.image.title=ESPHome Enhanced Dashboard (HA Add-on, ${{ matrix.arch }})
+            org.opencontainers.image.source=https://github.com/heffneil/esphome-enhanced-dashboard-addon
+            org.opencontainers.image.version=${{ steps.meta.outputs.version }}
