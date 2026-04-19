@@ -1,0 +1,42 @@
+name: ESPHome Enhanced Dashboard
+panel_title: ESPHome Enhanced
+description: Modern ESPHome dashboard with search, tags, archive, side panel, batch actions
+version: 0.2.0
+slug: esphome_enhanced_dashboard
+url: https://github.com/heffneil/esphome-enhanced-dashboard
+arch:
+  - amd64
+  - aarch64
+image: ghcr.io/heffneil/{arch}-esphome-enhanced-dashboard
+
+hassio_api: true
+auth_api: true
+host_network: true
+ingress: true
+ingress_port: 0
+panel_icon: mdi:chip
+uart: true
+
+ports:
+  6052/tcp: null
+
+map:
+  - ssl:ro
+  - config:rw
+
+discovery:
+  - esphome
+
+schema:
+  status_use_ping: bool?
+  streamer_mode: bool?
+  leave_front_door_open: bool?
+  ssl: bool?
+  certfile: str?
+  keyfile: str?
+
+backup_exclude:
+  - '*/*/'
+
+init: false
+startup: services
