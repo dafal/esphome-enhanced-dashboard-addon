@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.5 — 2026-04-23
+
+- Column show/hide menu now covers every column: IP Address, Platform, BT Proxy, ESPHome Version, Comment, Tags, Config File (Status and Name are always visible)
+
 ## 0.2.4 — 2026-04-23
 
 - Fix Classic dashboard link 404 under HA ingress — the link was using an absolute path that bypassed the ingress proxy
