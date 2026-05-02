@@ -3,11 +3,11 @@ panel_title: ESPHome Enhanced
 description: Modern ESPHome dashboard with search, tags, archive, side panel, batch actions
 version: 0.2.15
 slug: esphome_enhanced_dashboard
-url: https://github.com/heffneil/esphome-enhanced-dashboard
+url: https://github.com/dafal/esphome-enhanced-dashboard-addon
 arch:
   - amd64
   - aarch64
-image: ghcr.io/heffneil/{arch}-esphome-enhanced-dashboard
+image: ghcr.io/dafal/{arch}-esphome-enhanced-dashboard
 
 hassio_api: true
 auth_api: true
