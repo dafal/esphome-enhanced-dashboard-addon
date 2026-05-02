@@ -893,6 +893,7 @@
         a+='<button class="sp-btn" onclick="D.openYaml(\''+cu+'\')">Edit</button>';
         a+='<button class="sp-btn" onclick="D.runCmd(\'validate\',\''+c+'\')">Validate</button>';
         a+='<button class="sp-btn" onclick="D.runCmd(\'compile\',\''+c+'\')">Compile</button>';
+        a+='<button class="sp-btn" onclick="D.downloadFirmware(\''+c+'\')">Download Firmware...</button>';
         a+='<button class="sp-btn" onclick="D.runCmd(\'logs\',\''+c+'\')">Logs</button>';
         if(d.web_port&&d.address)a+='<a class="sp-btn" href="http://'+esc(d.address)+':'+d.web_port+'" target="_blank" rel="noopener">Visit Device</a>';
         a+='<button class="sp-btn" onclick="D.showApiKey(\''+cu+'\')">Show API Key</button>';
@@ -1465,6 +1466,49 @@
       var a=document.createElement("a");
       a.href=URL.createObjectURL(b);
       a.download=basename+"-logs.txt";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    },
+
+    downloadFirmware:function(cfg){
+      fetch(REL+"downloads?configuration="+encodeURIComponent(cfg),{credentials:"same-origin"})
+        .then(function(r){
+          if(!r.ok)throw new Error("HTTP "+r.status);
+          return r.json();
+        })
+        .then(function(downloads){
+          if(!Array.isArray(downloads)||downloads.length===0){
+            throw new Error("No firmware downloads available. Compile the device first.");
+          }
+          if(downloads.length===1){
+            D._startFirmwareDownload(cfg,downloads[0]);
+            return;
+          }
+          var body='<div>Select a firmware artifact for <span class="hl">'+esc(cfg)+'</span>:</div>';
+          for(var i=0;i<downloads.length;i++){
+            var item=downloads[i]||{};
+            body+='<button class="sp-btn" style="margin-top:10px;border:1px solid #333" onclick="D._startFirmwareDownload(\''+esc(cfg)+'\',{file:\''+esc(item.file||"")+'\',download:\''+esc(item.download||"")+'\'});D._closeDlg(true)">'+
+              esc(item.title||item.download||item.file||("Option "+(i+1)))+
+              (item.description?'<div style="font-size:11px;color:#888;margin-top:2px">'+esc(item.description)+'</div>':'')+
+              '</button>';
+          }
+          D.dlgAlert("Download Firmware",body);
+        })
+        .catch(function(err){
+          D.dlgAlert("Download Firmware",'<div style="color:#ff9800">'+esc(String(err&&err.message||err))+'</div>');
+        });
+    },
+
+    _startFirmwareDownload:function(cfg,item){
+      if(!item||!item.file){
+        D.dlgAlert("Download Firmware",'<div style="color:#ff9800">Invalid firmware download metadata.</div>');
+        return;
+      }
+      var url=REL+"download.bin?configuration="+encodeURIComponent(cfg)+"&file="+encodeURIComponent(item.file);
+      if(item.download)url+="&download="+encodeURIComponent(item.download);
+      var a=document.createElement("a");
+      a.href=url;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
