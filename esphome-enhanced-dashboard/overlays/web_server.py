@@ -1344,11 +1344,53 @@ class DownloadListRequestHandler(BaseHandler):
             get_download_types = getattr(module, "get_download_types")
         except AttributeError as exc:
             raise ValueError(f"Unknown platform {platform}") from exc
-        downloads = get_download_types(storage_json)
+        downloads = [
+            item
+            for item in get_download_types(storage_json)
+            if DownloadBinaryRequestHandler.resolve_download_path(
+                configuration, storage_json, item.get("file", "")
+            )
+            is not None
+        ]
         return json.dumps(downloads)
 
 
 class DownloadBinaryRequestHandler(BaseHandler):
+    @staticmethod
+    def resolve_download_path(
+        configuration: str | None,
+        storage_json: StorageJSON,
+        file_name: str,
+    ) -> Path | None:
+        """Resolve a requested download artifact to a real file path."""
+        if not file_name or storage_json.firmware_bin_path is None:
+            return None
+
+        base_dir = storage_json.firmware_bin_path.parent.resolve()
+        path = base_dir.joinpath(file_name).resolve()
+        try:
+            path.relative_to(base_dir)
+        except ValueError:
+            return None
+
+        if path.is_file():
+            return path
+
+        args = [*ESPHOME_COMMAND, "idedata", settings.rel_path(configuration)]
+        result = subprocess.run(args, capture_output=True, text=True, check=False)
+        if result.returncode != 0:
+            return None
+
+        try:
+            idedata = platformio_api.IDEData(json.loads(result.stdout))
+        except (json.JSONDecodeError, ValueError, TypeError):
+            return None
+
+        for image in idedata.extra_flash_images:
+            if image.path.as_posix().endswith(file_name):
+                return image.path
+        return None
+
     def _load_file(self, path: str, compressed: bool) -> bytes:
         """Load a file from disk and compress it if requested."""
         with open(path, "rb") as f:
@@ -1386,35 +1428,19 @@ class DownloadBinaryRequestHandler(BaseHandler):
             self.send_error(404)
             return
 
-        base_dir = storage_json.firmware_bin_path.parent.resolve()
-        path = base_dir.joinpath(file_name).resolve()
-        try:
-            path.relative_to(base_dir)
-        except ValueError:
-            self.send_error(403)
+        path = await loop.run_in_executor(
+            None,
+            self.resolve_download_path,
+            configuration,
+            storage_json,
+            file_name,
+        )
+        if path is None:
+            self.send_error(404)
             return
 
-        if not path.is_file():
-            args = [*ESPHOME_COMMAND, "idedata", settings.rel_path(configuration)]
-            rc, stdout, _ = await async_run_system_command(args)
-
-            if rc != 0:
-                self.send_error(404 if rc == 2 else 500)
-                return
-
-            idedata = platformio_api.IDEData(json.loads(stdout))
-
-            found = False
-            for image in idedata.extra_flash_images:
-                if image.path.as_posix().endswith(file_name):
-                    path = image.path
-                    download_name = file_name
-                    found = True
-                    break
-
-            if not found:
-                self.send_error(404)
-                return
+        if path.name != file_name:
+            download_name = file_name
 
         download_name = download_name + ".gz" if compressed else download_name
 
