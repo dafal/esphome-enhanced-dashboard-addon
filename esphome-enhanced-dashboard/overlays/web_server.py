@@ -1350,7 +1350,7 @@ class DownloadListRequestHandler(BaseHandler):
             if DownloadBinaryRequestHandler.resolve_download_path(
                 configuration, storage_json, item.get("file", "")
             )
-            is not None
+            is not None  # returns (Path, bool) tuple on success, None on failure
         ]
         return json.dumps(downloads)
 
@@ -1361,8 +1361,16 @@ class DownloadBinaryRequestHandler(BaseHandler):
         configuration: str | None,
         storage_json: StorageJSON,
         file_name: str,
-    ) -> Path | None:
-        """Resolve a requested download artifact to a real file path."""
+    ) -> tuple[Path, bool] | None:
+        """Resolve a requested download artifact to a real file path.
+
+        Returns a ``(path, via_idedata)`` tuple on success, or ``None`` when the
+        artifact cannot be found.  ``via_idedata`` is ``True`` when the path was
+        located through PlatformIO idedata (i.e. an extra flash image that lives
+        outside the normal build output directory); the caller should then use
+        ``file_name`` as the download filename rather than the caller-supplied
+        ``?download=`` parameter, matching the original ESPHome behaviour.
+        """
         if not file_name or storage_json.firmware_bin_path is None:
             return None
 
@@ -1374,8 +1382,15 @@ class DownloadBinaryRequestHandler(BaseHandler):
             return None
 
         if path.is_file():
-            return path
+            return path, False
 
+        # The file is not in the standard build output directory — fall back to
+        # querying PlatformIO idedata for extra flash images (e.g. bootloader
+        # partitions stored elsewhere in the SDK tree).
+        # subprocess.run is used here intentionally: this method is always
+        # called inside a run_in_executor() worker thread, so blocking is safe
+        # and we cannot use the async async_run_system_command helper from
+        # within a synchronous context.
         args = [*ESPHOME_COMMAND, "idedata", settings.rel_path(configuration)]
         result = subprocess.run(args, capture_output=True, text=True, check=False)
         if result.returncode != 0:
@@ -1388,7 +1403,7 @@ class DownloadBinaryRequestHandler(BaseHandler):
 
         for image in idedata.extra_flash_images:
             if image.path.as_posix().endswith(file_name):
-                return image.path
+                return image.path, True
         return None
 
     def _load_file(self, path: str, compressed: bool) -> bytes:
@@ -1428,18 +1443,23 @@ class DownloadBinaryRequestHandler(BaseHandler):
             self.send_error(404)
             return
 
-        path = await loop.run_in_executor(
+        resolved = await loop.run_in_executor(
             None,
             self.resolve_download_path,
             configuration,
             storage_json,
             file_name,
         )
-        if path is None:
+        if resolved is None:
             self.send_error(404)
             return
 
-        if path.name != file_name:
+        path, via_idedata = resolved
+        # When the path was found via idedata (an extra flash image outside the
+        # standard build output directory) the caller-supplied ?download= name
+        # is not meaningful — use the short file_name instead, matching the
+        # original ESPHome dashboard behaviour.
+        if via_idedata:
             download_name = file_name
 
         download_name = download_name + ".gz" if compressed else download_name

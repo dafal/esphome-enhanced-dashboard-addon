@@ -1471,6 +1471,8 @@
       document.body.removeChild(a);
     },
 
+    _firmwareDownloads:null,
+
     downloadFirmware:function(cfg){
       fetch(REL+"downloads?configuration="+encodeURIComponent(cfg),{credentials:"same-origin"})
         .then(function(r){
@@ -1488,16 +1490,33 @@
             D._startFirmwareDownload(cfg,downloads[0]);
             return;
           }
+          // Multiple artifacts — present a picker using dlgConfirm so that the
+          // normal Promise flow is preserved (footer button resolves the dialog,
+          // .then() handles the result) rather than having body buttons call
+          // _closeDlg directly.
           D._firmwareDownloads={cfg:cfg,items:downloads};
           var body='<div>Select a firmware artifact for <span class="hl">'+esc(cfg)+'</span>:</div>';
           for(var i=0;i<downloads.length;i++){
             var item=downloads[i]||{};
-            body+='<button class="sp-btn" style="margin-top:10px;border:1px solid #333" onclick="D._downloadFirmwareOption('+i+')">'+
-              esc(item.title||item.download||item.file||("Option "+(i+1)))+
-              (item.description?'<div style="font-size:11px;color:#888;margin-top:2px">'+esc(item.description)+'</div>':'')+
-              '</button>';
+            var label=esc(item.title||item.download||item.file||("Option "+(i+1)));
+            var desc=item.description?'<span style="font-size:11px;color:#888;margin-left:6px">'+esc(item.description)+'</span>':'';
+            body+='<label style="display:block;margin-top:10px;cursor:pointer">'+
+              '<input type="radio" name="fwopt" value="'+i+'"'+(i===0?' checked':'')+' style="margin-right:6px">'+
+              label+desc+
+              '</label>';
           }
-          D.dlgAlert("Download Firmware",body);
+          D.dlgConfirm("Download Firmware",body,{okLabel:"Download"}).then(function(ok){
+            if(!ok)return;
+            var sel=document.querySelector('input[name="fwopt"]:checked');
+            var idx=sel?parseInt(sel.value,10):0;
+            var state=D._firmwareDownloads;
+            var chosen=state&&state.items&&state.items[idx];
+            if(!chosen){
+              D.dlgAlert("Download Firmware",'<div style="color:#ff9800">Invalid firmware download selection.</div>');
+              return;
+            }
+            D._startFirmwareDownload(state.cfg,chosen);
+          });
         })
         .catch(function(err){
           D.dlgAlert("Download Firmware",'<div style="color:#ff9800">'+esc(String(err&&err.message||err))+'</div>');
@@ -1511,16 +1530,18 @@
       }
       var url=REL+"download.bin?configuration="+encodeURIComponent(cfg)+"&file="+encodeURIComponent(item.file);
       if(item.download)url+="&download="+encodeURIComponent(item.download);
+      var disposition="";
       fetch(url,{credentials:"same-origin"})
         .then(function(r){
           if(r.status===404){
             throw new Error("This firmware artifact is not available for the current build. Recompile the device and try again.");
           }
           if(!r.ok)throw new Error("HTTP "+r.status);
-          return Promise.all([r.blob(),Promise.resolve(r.headers.get("Content-Disposition"))]);
+          disposition=r.headers.get("Content-Disposition")||"";
+          return r.blob();
         })
-        .then(function(parts){
-          var blob=parts[0],disposition=parts[1]||"",filename=item.download||item.file||"firmware.bin";
+        .then(function(blob){
+          var filename=item.download||item.file||"firmware.bin";
           var m=disposition.match(/filename="([^"]+)"/i);
           if(m&&m[1])filename=m[1];
           var blobUrl=URL.createObjectURL(blob);
@@ -1535,18 +1556,6 @@
         .catch(function(err){
           D.dlgAlert("Download Firmware",'<div style="color:#ff9800">'+esc(String(err&&err.message||err))+'</div>');
         });
-    },
-
-    _firmwareDownloads:null,
-    _downloadFirmwareOption:function(index){
-      var state=D._firmwareDownloads;
-      var item=state&&state.items&&state.items[index];
-      if(!state||!item){
-        D.dlgAlert("Download Firmware",'<div style="color:#ff9800">Invalid firmware download selection.</div>');
-        return;
-      }
-      D._closeDlg(true);
-      D._startFirmwareDownload(state.cfg,item);
     },
 
     _loadAce:function(){
