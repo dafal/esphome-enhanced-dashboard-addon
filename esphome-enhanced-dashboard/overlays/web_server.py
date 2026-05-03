@@ -1313,6 +1313,11 @@ class DownloadListRequestHandler(BaseHandler):
         if storage_json is None:
             return None
 
+        # No firmware has been compiled yet — bail out immediately before any
+        # expensive YAML parsing or module imports so the 404 is returned fast.
+        if storage_json.firmware_bin_path is None:
+            return None
+
         try:
             config = yaml_util.load_yaml(settings.rel_path(configuration))
 
@@ -1338,11 +1343,6 @@ class DownloadListRequestHandler(BaseHandler):
             const.PLATFORM_LN882X,
         ):
             platform = "libretiny"
-
-        # No firmware has been compiled yet — signal 404 so the UI can show a
-        # friendly "compile first" message rather than an empty artifact list.
-        if storage_json.firmware_bin_path is None:
-            return None
 
         try:
             module = importlib.import_module(f"esphome.components.{platform}")
