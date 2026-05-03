@@ -1339,6 +1339,11 @@ class DownloadListRequestHandler(BaseHandler):
         ):
             platform = "libretiny"
 
+        # No firmware has been compiled yet — signal 404 so the UI can show a
+        # friendly "compile first" message rather than an empty artifact list.
+        if storage_json.firmware_bin_path is None:
+            return None
+
         try:
             module = importlib.import_module(f"esphome.components.{platform}")
             get_download_types = getattr(module, "get_download_types")
