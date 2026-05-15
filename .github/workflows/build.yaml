@@ -14,7 +14,7 @@ on:
 env:
   ADDON_DIR: esphome-enhanced-dashboard
   REGISTRY: ghcr.io
-  OWNER: heffneil
+  OWNER: dafal
 
 jobs:
   build:
@@ -72,5 +72,5 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ matrix.arch }}-esphome-enhanced-dashboard:latest
           labels: |
             org.opencontainers.image.title=ESPHome Enhanced Dashboard (HA Add-on, ${{ matrix.arch }})
-            org.opencontainers.image.source=https://github.com/heffneil/esphome-enhanced-dashboard-addon
+            org.opencontainers.image.source=https://github.com/dafal/esphome-enhanced-dashboard-addon
             org.opencontainers.image.version=${{ steps.meta.outputs.version }}

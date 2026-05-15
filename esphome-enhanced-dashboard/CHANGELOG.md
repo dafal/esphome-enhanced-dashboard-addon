@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.16 — 2026-05-15
+## 0.2.16-test1 — 2026-05-15
 
 - Show ESPHome versions from live device API info instead of cached compile metadata. Unverified devices now show `Unknown`; cached compile metadata remains visible in the side panel as "Last compiled with".
 
