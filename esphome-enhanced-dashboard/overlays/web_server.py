@@ -73,6 +73,8 @@ AUTH_COOKIE_NAME = "authenticated"
 
 settings = DASHBOARD.settings
 
+DEFAULT_API_PORT = 6053
+
 
 def template_args() -> dict[str, Any]:
     version = const.__version__
@@ -1284,7 +1286,117 @@ class ApiKeyHandler(BaseHandler):
                     return str(value)
         except Exception:  # pylint: disable=broad-except
             return None
+
+
+class DeviceInfoHandler(BaseHandler):
+    """Return verified live device info from the ESPHome native API."""
+
+    @authenticated
+    @bind_config
+    async def get(self, configuration: str | None = None) -> None:
+        self.set_header("content-type", "application/json")
+
+        try:
+            config_path = Path(settings.rel_path(configuration))
+            if not config_path.exists():
+                self.set_status(404)
+                self.write(json.dumps({"version": None, "error": "Configuration not found"}))
+                return
+
+            dashboard = DASHBOARD
+            entry = dashboard.entries.get(config_path)
+            data = await asyncio.get_running_loop().run_in_executor(
+                None, ApiKeyHandler._load_and_merge, config_path
+            )
+            api = data.get("api") if isinstance(data, dict) else None
+            if not isinstance(api, dict):
+                self.write(json.dumps({"version": None, "error": "API not configured"}))
+                return
+
+            host = self._host_for_entry(entry, data, configuration)
+            if not host:
+                self.write(json.dumps({"version": None, "error": "No device address"}))
+                return
+
+            port = self._api_port(api)
+            key, key_type = await self._api_key(api)
+            info = await self._fetch_device_info(host, port, key, key_type)
+            self.write(json.dumps({
+                "version": info.esphome_version or None,
+                "name": info.name,
+                "friendly_name": info.friendly_name,
+                "uses_password": info.uses_password,
+            }))
+        except Exception as exc:  # pylint: disable=broad-except
+            _LOGGER.debug("Live device info failed for %s: %r", configuration, exc)
+            self.write(json.dumps({"version": None, "error": "Unavailable"}))
+
+    @staticmethod
+    def _host_for_entry(
+        entry: DashboardEntry | None, data: dict | None, configuration: str | None
+    ) -> str | None:
+        if entry and entry.address:
+            return entry.address
+        if entry and entry.name:
+            return f"{entry.name}.local"
+        if isinstance(data, dict):
+            esphome = data.get("esphome")
+            if isinstance(esphome, dict) and esphome.get("name"):
+                return f"{esphome['name']}.local"
+        if configuration:
+            return f"{Path(configuration).stem}.local"
         return None
+
+    @staticmethod
+    def _api_port(api: dict) -> int:
+        try:
+            return int(api.get("port") or DEFAULT_API_PORT)
+        except (TypeError, ValueError):
+            return DEFAULT_API_PORT
+
+    @staticmethod
+    async def _api_key(api: dict) -> tuple[str | None, str | None]:
+        key = None
+        key_type = None
+        encryption = api.get("encryption")
+        if isinstance(encryption, dict) and encryption.get("key"):
+            key = encryption["key"]
+            key_type = "encryption"
+        elif api.get("password"):
+            key = api["password"]
+            key_type = "password"
+
+        if isinstance(key, str) and key.lstrip().startswith("!secret "):
+            secret_name = key.split(None, 1)[1].strip()
+            key = await asyncio.get_running_loop().run_in_executor(
+                None, ApiKeyHandler._load_secret, secret_name
+            )
+        return (str(key) if key else None), key_type
+
+    @staticmethod
+    async def _fetch_device_info(
+        host: str,
+        port: int,
+        key: str | None,
+        key_type: str | None,
+    ):
+        from aioesphomeapi import APIClient
+
+        password = key if key_type == "password" else None
+        noise_psk = key if key_type == "encryption" else None
+        client = APIClient(
+            host,
+            port,
+            password,
+            client_info="ESPHome Enhanced Dashboard",
+            noise_psk=noise_psk,
+        )
+        try:
+            async with asyncio.timeout(5):
+                await client.connect(login=True, log_errors=False)
+                return await client.device_info()
+        finally:
+            await client.disconnect(force=True)
 
 
 class DownloadListRequestHandler(BaseHandler):
@@ -2000,6 +2112,7 @@ def make_app(debug=get_bool_env(ENV_DEV)) -> tornado.web.Application:
             (f"{rel}ignore-device", IgnoreDeviceRequestHandler),
             (f"{rel}device-tags", DeviceTagsHandler),
             (f"{rel}api-key", ApiKeyHandler),
+            (f"{rel}device-info", DeviceInfoHandler),
             (f"{rel}toggle-inactive", ToggleInactiveHandler),
             (f"{rel}ping-host", PingHostHandler),
         ],

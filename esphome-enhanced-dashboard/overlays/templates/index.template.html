@@ -577,7 +577,7 @@
     return backendRel;
   })();
 
-  var devices=[],archived=[],ping={},selected={};
+  var devices=[],archived=[],ping={},selected={},liveVersions={};
   // Restore last-used sort from localStorage so the user's preference survives reloads.
   var _savedSort=(function(){
     try{
@@ -628,9 +628,12 @@
   // True only if running version is OLDER than current (i.e. an upgrade is available).
   // A device on a newer-than-dashboard version is not "behind" — don't nag.
   function isUpdateAvailable(d){
-    if(!d||!d.deployed_version||!d.current_version)return false;
-    return vcmp(d.deployed_version,d.current_version)<0;
+    var v=verifiedVersion(d);
+    if(!d||!v||!d.current_version)return false;
+    return vcmp(v,d.current_version)<0;
   }
+  function verifiedVersion(d){var s=d&&liveVersions[d.configuration];return s&&s.version?s.version:""}
+  function versionCellText(d){var s=d&&liveVersions[d.configuration];return s&&s.loading?"Checking...":(verifiedVersion(d)||"Unknown")}
   function stOf(d){if(d.inactive)return"inactive";var s=ping[d.configuration];return s===true?"online":s===false?"offline":"unknown"}
   function stLbl(d){if(d.inactive)return"Inactive";var s=ping[d.configuration];return s===true?"Online":s===false?"Offline":"Unknown"}
   function stOrd(d){if(d.inactive)return 3;var s=ping[d.configuration];return s===true?0:(s===null||s===undefined)?1:2}
@@ -668,7 +671,7 @@
       return 0;
     }
     else if(sCol==="platform"){va=(a.target_platform||"").toLowerCase();vb=(b.target_platform||"").toLowerCase()}
-    else if(sCol==="version"){va=a.deployed_version||"";vb=b.deployed_version||""}
+    else if(sCol==="version"){va=verifiedVersion(a);vb=verifiedVersion(b)}
     else if(sCol==="comment"){va=(a.comment||"").toLowerCase();vb=(b.comment||"").toLowerCase()}
     else if(sCol==="config"){va=(a.configuration||"").toLowerCase();vb=(b.configuration||"").toLowerCase()}
     else if(sCol==="tags"){va=(a.tags||[]).join(",");vb=(b.tags||[]).join(",")}
@@ -725,10 +728,10 @@
     var isBt=Array.isArray(d.loaded_integrations)&&d.loaded_integrations.indexOf("bluetooth_proxy")>=0;
     h+='<td class="col-btproxy">'+(isBt?'<span class="btproxy-on" title="Bluetooth Proxy enabled">&#10003;</span>':'<span class="btproxy-off">-</span>')+'</td>';
     h+='<td class="col-version">';
-    if(d.deployed_version){
-      h+='<span class="ver">'+esc(d.deployed_version)+'</span>';
+    if(verifiedVersion(d)){
+      h+='<span class="ver">'+esc(verifiedVersion(d))+'</span>';
       if(hasUpd)h+=' <span class="ver-update">(Update Available)</span>';
-    }else h+='<span class="muted">-</span>';
+    }else h+='<span class="muted">'+esc(versionCellText(d))+'</span>';
     h+="</td>";
     h+='<td class="col-comment"><span class="cell-comment">'+esc(d.comment||"-")+"</span></td>";
     h+='<td class="col-tags" style="cursor:pointer" onclick="event.stopPropagation();D.openTagEdit(\''+c+'\')">';
@@ -754,8 +757,24 @@
     $tagbar.classList.add("visible");
   }
 
+  function requestLiveVersions(){
+    var existing={};
+    devices.forEach(function(d){
+      var cfg=d.configuration;
+      existing[cfg]=true;
+      if(d.inactive||liveVersions[cfg])return;
+      liveVersions[cfg]={loading:true};
+      fetch(REL+"device-info?configuration="+encodeURIComponent(cfg),{credentials:"same-origin"})
+        .then(function(r){return r.json()})
+        .then(function(info){liveVersions[cfg]={version:(info&&info.version)||""};render()})
+        .catch(function(){liveVersions[cfg]={version:""};render()});
+    });
+    Object.keys(liveVersions).forEach(function(cfg){if(!existing[cfg])delete liveVersions[cfg]});
+  }
+
   function render(){
     $load.style.display="none";
+    requestLiveVersions();
     var f=devices.filter(matchDevice),fa=archived.filter(matchDevice);
     f.sort(cmp);fa.sort(cmp);
     renderTagBar();
@@ -858,8 +877,9 @@
       info+='<div class="sp-info-row"><span class="sp-info-label">Status</span><span class="sp-info-value">'+sl+'</span></div>';
       if(d.address)info+='<div class="sp-info-row"><span class="sp-info-label">IP Address</span><span class="sp-info-value">'+esc(d.address)+'</span></div>';
       if(d.target_platform)info+='<div class="sp-info-row"><span class="sp-info-label">Platform</span><span class="sp-info-value">'+esc(d.target_platform)+'</span></div>';
+      info+='<div class="sp-info-row"><span class="sp-info-label">ESPHome Version</span><span class="sp-info-value">'+esc(versionCellText(d))+'</span></div>';
       if(d.deployed_version){
-        info+='<div class="sp-info-row"><span class="sp-info-label">ESPHome Version</span><span class="sp-info-value">'+esc(d.deployed_version)+'</span></div>';
+        info+='<div class="sp-info-row"><span class="sp-info-label">Last compiled with</span><span class="sp-info-value">'+esc(d.deployed_version)+'</span></div>';
         if(hasUpd)info+='<div class="sp-info-row"><span class="sp-info-label"></span><span style="color:#ff9800;font-size:11px;font-family:inherit">(Update Available: '+esc(d.current_version)+')</span></div>';
       }
       if(d.comment)info+='<div class="sp-info-row"><span class="sp-info-label">Comment</span><span class="sp-info-value" style="font-family:inherit">'+esc(d.comment)+'</span></div>';
@@ -1834,7 +1854,7 @@
     });
   })();
 
-  function refresh(){fetch(REL+"devices",{credentials:"same-origin"}).then(function(r){return r.json()}).then(function(d){devices=d.configured||[];archived=d.archived||[];render()})}
+  function refresh(){fetch(REL+"devices",{credentials:"same-origin"}).then(function(r){return r.json()}).then(function(d){devices=d.configured||[];archived=d.archived||[];liveVersions={};render()})}
 
   // WebSocket
   function connectWS(){
@@ -1842,10 +1862,10 @@
     ws.onmessage=function(ev){
       var m;try{m=JSON.parse(ev.data)}catch(e){return}
       if(m.event==="initial_state"){devices=(m.data.devices&&m.data.devices.configured)||[];archived=(m.data.devices&&m.data.devices.archived)||[];ping=m.data.ping||{};render()}
-      else if(m.event==="entry_state_changed"){ping[m.data.filename]=m.data.state;render()}
+      else if(m.event==="entry_state_changed"){ping[m.data.filename]=m.data.state;if(m.data.state===true&&(!liveVersions[m.data.filename]||!liveVersions[m.data.filename].version))delete liveVersions[m.data.filename];render()}
       else if(m.event==="entry_added"){var d=m.data.device;if(d&&!devices.find(function(x){return x.configuration===d.configuration}))devices.push(d);render()}
       else if(m.event==="entry_removed"){var e2=m.data.device;if(e2)devices=devices.filter(function(x){return x.configuration!==e2.configuration});render()}
-      else if(m.event==="entry_updated"){var u=m.data.device;if(u){var idx=devices.findIndex(function(x){return x.configuration===u.configuration});if(idx>=0)devices[idx]=u;else devices.push(u)}render()}
+      else if(m.event==="entry_updated"){var u=m.data.device;if(u){delete liveVersions[u.configuration];var idx=devices.findIndex(function(x){return x.configuration===u.configuration});if(idx>=0)devices[idx]=u;else devices.push(u)}render()}
       else if(m.event==="entry_archived"||m.event==="entry_unarchived")refresh();
     };
     ws.onclose=function(){setTimeout(connectWS,3000)};

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.16 — 2026-05-15
+
+- Show ESPHome versions from live device API info instead of cached compile metadata. Unverified devices now show `Unknown`; cached compile metadata remains visible in the side panel as "Last compiled with".
+
 ## 0.2.15 — 2026-05-01
 
 - Pin the topbar, tag bar, and selection (batch) bar to the top of the page. Only the device list scrolls now, so search, **+ New Device**, **Secrets**, the column-toggle menu, and bulk-action buttons stay visible no matter how long the device list is. Closes the "buttons disappear when you scroll" report.
