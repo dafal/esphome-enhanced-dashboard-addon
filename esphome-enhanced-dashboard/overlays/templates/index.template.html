@@ -577,7 +577,8 @@
     return backendRel;
   })();
 
-  var devices=[],archived=[],ping={},selected={},liveVersions={};
+  var devices=[],archived=[],ping={},selected={},liveVersions={},liveVersionQueue=[],liveVersionActive=0;
+  var LIVE_VERSION_MAX_ACTIVE=6;
   // Restore last-used sort from localStorage so the user's preference survives reloads.
   var _savedSort=(function(){
     try{
@@ -764,12 +765,23 @@
       existing[cfg]=true;
       if(d.inactive||liveVersions[cfg])return;
       liveVersions[cfg]={loading:true};
-      fetch(REL+"device-info?configuration="+encodeURIComponent(cfg),{credentials:"same-origin"})
-        .then(function(r){return r.json()})
-        .then(function(info){liveVersions[cfg]={version:(info&&info.version)||""};render()})
-        .catch(function(){liveVersions[cfg]={version:""};render()});
+      liveVersionQueue.push(cfg);
     });
     Object.keys(liveVersions).forEach(function(cfg){if(!existing[cfg])delete liveVersions[cfg]});
+    drainLiveVersionQueue();
+  }
+
+  function drainLiveVersionQueue(){
+    while(liveVersionActive<LIVE_VERSION_MAX_ACTIVE&&liveVersionQueue.length){
+      (function(cfg){
+        liveVersionActive++;
+        fetch(REL+"device-info?configuration="+encodeURIComponent(cfg),{credentials:"same-origin"})
+          .then(function(r){return r.json()})
+          .then(function(info){liveVersions[cfg]={version:(info&&info.version)||""}})
+          .catch(function(){liveVersions[cfg]={version:""}})
+          .then(function(){liveVersionActive--;render();drainLiveVersionQueue()});
+      })(liveVersionQueue.shift());
+    }
   }
 
   function render(){
