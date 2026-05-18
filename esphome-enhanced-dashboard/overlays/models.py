@@ -122,12 +122,32 @@ def _merge_packages(data: dict) -> dict:
 
     merged: dict = {}
     for pkg_data in packages.values():
-        if isinstance(pkg_data, dict):
+        pkg_data = _load_package_data(pkg_data)
+        if pkg_data is not None:
             _deep_merge(merged, pkg_data)
 
     root_without_packages = {k: v for k, v in data.items() if k != "packages"}
     _deep_merge(merged, root_without_packages)
     return merged
+
+
+def _load_package_data(pkg_data) -> dict | None:
+    """Return package data, resolving ESPHome IncludeFile objects if needed."""
+    if isinstance(pkg_data, dict):
+        return pkg_data
+
+    load = getattr(pkg_data, "load", None)
+    if not callable(load):
+        return None
+
+    try:
+        loaded = load()
+    except Exception as exc:  # pylint: disable=broad-except
+        _LOGGER.debug("Failed to load package %r: %r", pkg_data, exc)
+        return None
+    if isinstance(loaded, dict):
+        return loaded
+    return None
 
 
 def _deep_merge(target: dict, source: dict) -> None:

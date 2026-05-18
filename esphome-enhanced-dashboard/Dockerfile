@@ -13,11 +13,11 @@ COPY overlays/templates/          /esphome/esphome/dashboard/templates/
 ARG BUILD_ARCH
 ARG BUILD_VERSION
 LABEL \
-    io.hass.name="ESPHome Enhanced Dashboard" \
-    io.hass.description="Modern dashboard overlay for ESPHome with search, tags, archive, and batch actions" \
+    io.hass.name="ESPHome Enhanced Dashboard Dev" \
+    io.hass.description="Dev/test dashboard overlay for ESPHome with search, tags, archive, and batch actions" \
     io.hass.arch="${BUILD_ARCH}" \
     io.hass.type="addon" \
     io.hass.version="${BUILD_VERSION}" \
-    maintainer="heffneil" \
-    org.opencontainers.image.title="ESPHome Enhanced Dashboard (HA Add-on)" \
-    org.opencontainers.image.source="https://github.com/heffneil/esphome-enhanced-dashboard-addon"
+    maintainer="dafal" \
+    org.opencontainers.image.title="ESPHome Enhanced Dashboard Dev (HA Add-on)" \
+    org.opencontainers.image.source="https://github.com/dafal/esphome-enhanced-dashboard-addon"

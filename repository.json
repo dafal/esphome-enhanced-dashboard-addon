@@ -1,5 +1,5 @@
 {
-  "name": "ESPHome Enhanced Dashboard",
+  "name": "ESPHome Enhanced Dashboard Dev",
   "url": "https://github.com/dafal/esphome-enhanced-dashboard-addon",
-  "maintainer": "heffneil <heffneil@users.noreply.github.com>"
+  "maintainer": "dafal"
 }

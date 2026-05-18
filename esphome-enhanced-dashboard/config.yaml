@@ -1,13 +1,13 @@
-name: ESPHome Enhanced Dashboard
-panel_title: ESPHome Enhanced
-description: Modern ESPHome dashboard with search, tags, archive, side panel, batch actions
+name: ESPHome Enhanced Dashboard Dev
+panel_title: ESPHome Enhanced Dev
+description: Dev/test fork of ESPHome Enhanced Dashboard with search, tags, archive, side panel, batch actions
 version: 0.2.16-test2
-slug: esphome_enhanced_dashboard
+slug: esphome_enhanced_dashboard_dev
 url: https://github.com/dafal/esphome-enhanced-dashboard-addon
 arch:
   - amd64
   - aarch64
-image: ghcr.io/dafal/{arch}-esphome-enhanced-dashboard
+image: ghcr.io/dafal/{arch}-esphome-enhanced-dashboard-dev
 
 hassio_api: true
 auth_api: true
